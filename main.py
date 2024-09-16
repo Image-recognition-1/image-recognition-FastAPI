@@ -20,7 +20,6 @@ firebase_admin.initialize_app(cred)
 db = firestore.client()
 app = FastAPI()
 
-# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:9000"],
@@ -29,10 +28,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# OAuth2 scheme
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
-# Defining  fakin model
 
 templates = Jinja2Templates(directory="templates")
 model = ResNet50(weights='imagenet')
@@ -67,7 +64,10 @@ class UpdateUserRequest(BaseModel):
     role: str = None
     disabled: bool = None
 
-# Famozna ruta za upload slike
+class GoogleLoginRequest(BaseModel):
+    idToken: str
+
+
 @app.post("/upload")
 async def upload(request: Request, file: UploadFile = File(...)):
     try:
@@ -259,6 +259,39 @@ async def update_user(uid: str, update_request: UpdateUserRequest):
 
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error updating user: {str(e)}")
+
+
+@app.post("/google-login")
+async def google_login(request: Request, google_login_request: GoogleLoginRequest, response: Response):
+    try:
+        decoded_token = auth.verify_id_token(google_login_request.idToken)
+        uid = decoded_token["uid"]
+        email = decoded_token["email"]
+        
+        user_ref = db.collection('users').document(uid)
+        user_snapshot = user_ref.get()
+        
+        if not user_snapshot.exists:
+            user_data = {
+                'uid': uid,
+                'email': email,
+                'fullName': decoded_token.get("name", ""),
+                'username': email.split('@')[0],
+                'role': 'USER',
+                'disabled': False
+            }
+            user_ref.set(user_data)
+        
+        user_snapshot = user_ref.get()
+        user_data = user_snapshot.to_dict()
+
+        response.set_cookie(key="Token", value=google_login_request.idToken, httponly=True, secure=True)
+        
+        return {"message": "Login successful", "user": user_data}
+
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Google login failed: {str(e)}")
+    
 
 
 if __name__ == '__main__':
