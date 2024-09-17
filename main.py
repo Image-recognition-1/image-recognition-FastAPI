@@ -18,6 +18,7 @@ import os
 cred = credentials.Certificate('./firebase-admin-sdk.json')
 firebase_admin.initialize_app(cred)
 db = firestore.client()
+
 app = FastAPI()
 
 app.add_middleware(
@@ -167,40 +168,51 @@ async def register_user(response: Response, register_request: RegisterRequest):
         raise HTTPException(status_code=400, detail=f"Error registering user: {str(e)}")
 
 
+
 @app.get("/getme", response_model=ResponseUser)
 async def get_me(request: Request):
     try:
+        
         token = request.cookies.get("Token")
+        
         if not token:
-            raise HTTPException(status_code=401, detail="Token not found in cookies")
-
+            raise HTTPException(status_code=401, detail="Token not found")
+        
         decoded_token = auth.verify_id_token(token)
-        uid = decoded_token.get('uid')
-
+        uid = decoded_token.get("uid")
         if not uid:
             raise HTTPException(status_code=401, detail="Invalid token")
-
+        
         user_ref = db.collection('users').document(uid)
-        user_snapshot = user_ref.get()
+        user_snapshot = user_ref.get(timeout=10)
 
         if not user_snapshot.exists:
             raise HTTPException(status_code=404, detail="User not found")
-
+        
         user_data = user_snapshot.to_dict()
 
-        response_user = ResponseUser(
-            uid=user_data['uid'],
-            email=user_data['email'],
-            fullName=user_data['fullName'],
-            username=user_data['username'],
-            role=user_data['role'],
-            disabled=user_data['disabled']
-        )
-        
-        return response_user
+        return {
+            "uid": user_data["uid"],
+            "email": user_data["email"],
+            "fullName": user_data["fullName"],
+            "username": user_data["username"],
+            "role": user_data["role"],
+            "disabled": user_data["disabled"]
+        }
+
+    except auth.InvalidIdTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    except auth.ExpiredIdTokenError:
+        raise HTTPException(status_code=401, detail="Token has expired")
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail="Error verifying token")
 
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Error retrieving user: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Error fetching user data: {str(e)}")
+
+
     
 @app.get("/logout")
 async def logout(response: Response):
