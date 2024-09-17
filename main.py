@@ -96,6 +96,7 @@ async def upload(request: Request, file: UploadFile = File(...)):
     finally:
         if os.path.exists(file.filename):
             os.remove(file.filename)
+            
 
 @app.post("/login")
 async def login(response: Response, form_data: OAuth2PasswordRequestForm = Depends()):
