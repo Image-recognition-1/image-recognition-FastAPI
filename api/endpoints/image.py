@@ -21,6 +21,7 @@ class ImagesRead(BaseModel):
     filename: str
     image_url: str
     uploaded_at: str
+    predictions: dict
 
 
 @router.post("/upload")
@@ -64,6 +65,7 @@ async def upload(request: Request, file: UploadFile = File(...)):
             'uploaded_at': datetime.utcnow(),
             'uid': uid,
             'filename': file.filename,
+            'predictions': json_results
         }
 
         db.collection('images').document(image_id).set(image_data)
@@ -110,7 +112,36 @@ async def get_images(request: Request):
 
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error fetching images: {str(e)}")
+
+@router.get("/image/{image_id}", response_model=ImagesRead)
+async def get_image(request: Request, image_id: str):
+    try:
+        token = request.cookies.get("Token")
+        
+        if not token:
+            raise HTTPException(status_code=401, detail="Token not found")
+        
+        decoded_token = auth.verify_id_token(token)
+        uid = decoded_token.get("uid")
+        if not uid:
+            raise HTTPException(status_code=401, detail="Invalid token")
+
+        image_ref = db.collection('images').where('id', '==', image_id).where('uid', '==', uid).stream()
+        image_docs = list(image_ref) 
+
+        if not image_docs: 
+            raise HTTPException(status_code=404, detail="Image not found")
+
+        for doc in image_docs:
+            image_data = doc.to_dict()
+            if 'uploaded_at' in image_data and isinstance(image_data['uploaded_at'], datetime):
+                image_data['uploaded_at'] = image_data['uploaded_at'].isoformat()
+            return JSONResponse(content=image_data)
+
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error fetching image: {str(e)}")
     
+
 @router.delete("/delete-image/{image_id}")
 async def delete_image(request: Request, image_id: str):
     try:
