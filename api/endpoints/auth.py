@@ -32,6 +32,7 @@ class UserRead(BaseModel):
     username: str
     role: str
     disabled: bool
+    profilePictureUrl: str = None
 
 class GoogleLoginRequest(BaseModel):
     idToken: str
@@ -69,7 +70,8 @@ async def register_user(response: Response, register_request: RegisterRequest):
             'fullName': register_request.fullName,
             'username': register_request.username,
             'role': register_request.role,
-            'disabled': register_request.disabled
+            'disabled': register_request.disabled,
+            'profilePictureUrl': 'https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png'
         }
         db.collection('users').document(register_request.uid).set(user_data)
         
@@ -103,7 +105,8 @@ async def register_user(response: Response, register_request: RegisterRequest):
             "fullName": user_firebase["fullName"],
             "username": user_firebase["username"],
             "role": user_firebase["role"],
-            "disabled": user_firebase["disabled"]
+            "disabled": user_firebase["disabled"],
+            "profilePictureUrl": user_firebase["profilePictureUrl"]
         }
     
     except Exception as e:
@@ -127,7 +130,8 @@ async def google_login(request: Request, google_login_request: GoogleLoginReques
                 'fullName': decoded_token.get("name", ""),
                 'username': email.split('@')[0],
                 'role': 'USER',
-                'disabled': False
+                'disabled': False,
+                'profilePictureUrl': decoded_token.get("picture", "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png")
             }
             user_ref.set(user_data)
         
